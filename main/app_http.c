@@ -219,6 +219,34 @@ static bool json_string_value(const char *body, const char *key, char *out, size
     return out_i > 0;
 }
 
+static bool json_number_text(const char *body, const char *key, char *out, size_t out_len)
+{
+    char needle[24];
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    const char *p = strstr(body, needle);
+    if (!p) {
+        return false;
+    }
+    p = strchr(p, ':');
+    if (!p) {
+        return false;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '"') {
+        return false;
+    }
+
+    size_t out_i = 0;
+    while (*p && *p != ',' && *p != '}' && !isspace((unsigned char)*p) && out_i + 1 < out_len) {
+        out[out_i++] = *p++;
+    }
+    out[out_i] = '\0';
+    return out_i > 0;
+}
+
 static bool body_string_value(const char *body, const char *key, char *out, size_t out_len)
 {
     return form_value(body, key, out, out_len) || json_string_value(body, key, out, out_len);
@@ -227,7 +255,9 @@ static bool body_string_value(const char *body, const char *key, char *out, size
 static bool body_percent_value(const char *body, const char *key, int *value)
 {
     char text[8];
-    return (form_value(body, key, text, sizeof(text)) || json_string_value(body, key, text, sizeof(text))) &&
+    return (form_value(body, key, text, sizeof(text)) ||
+            json_string_value(body, key, text, sizeof(text)) ||
+            json_number_text(body, key, text, sizeof(text))) &&
            parse_percent_text(text, value);
 }
 

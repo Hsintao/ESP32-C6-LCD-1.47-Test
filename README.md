@@ -12,6 +12,7 @@
 - LCD 使用 320 x 172 横屏显示 Codex 状态仪表盘。
 - PC 可通过 `/api/codex` 推送 Codex 账户、工作状态和限额进度。
 - 仓库提供 `scripts/codex_status_push.py`，可在 PC 端自动读取本机 Codex 状态并实时推送到板子。
+- `/api/codex` 同时兼容 JSON 数字和字符串形式的 `session` / `weekly` 百分比。
 - Codex 状态屏左上角使用黑白 Codex 图标，并关闭 LVGL 右下角帧率/CPU 性能监视显示。
 
 ## 配网
@@ -120,6 +121,13 @@ curl "http://板子IP/api/codex?session=28&session_reset=3h%2012m%20to%20reset"
 ```
 
 注意：`session_reset`、`weekly_reset` 里有空格时，URL 参数需要做 URL 编码；使用 POST JSON 时不需要手动编码。
+
+`session` 和 `weekly` 在 POST JSON 时可以传数字，也可以传字符串，两种都支持：
+
+```json
+{"session":21,"weekly":40}
+{"session":"21","weekly":"40"}
+```
 
 ## PC 端自动推送 Codex 状态
 
