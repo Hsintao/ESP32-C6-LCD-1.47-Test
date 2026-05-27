@@ -56,7 +56,7 @@ static void apply_codex_led_effect(bool offline)
     }
 
     if (strcmp(current_state, "Active") == 0) {
-        RGB_StartBreathingEx(0, 180, 255, 18, 140, 2, 12);
+        RGB_StartBreathingEx(255, 32, 180, 18, 140, 2, 12);
         return;
     }
 
@@ -173,9 +173,9 @@ void app_led_state_apply_codex_status(const char *status)
     codex_status_tick = xTaskGetTickCount();
     codex_offline_known = false;
     if (strcmp(status, "Active") == 0) {
-        current_r = 0;
-        current_g = 180;
-        current_b = 255;
+        current_r = 255;
+        current_g = 32;
+        current_b = 180;
     } else {
         current_r = 90;
         current_g = 120;

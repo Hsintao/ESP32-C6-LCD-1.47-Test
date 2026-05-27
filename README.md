@@ -147,7 +147,7 @@ curl "http://板子IP/api/codex?session=28&session_reset=3h%2012m%20to%20reset"
 
 当前默认启用安静风格的状态灯语言：
 
-- `Active`: 青蓝色慢呼吸，表示 Codex 正在活跃工作
+- `Active`: 红紫色慢呼吸，表示 Codex 正在活跃工作
 - `Idle`: 低亮度蓝灰色慢呼吸，表示 Codex 在线但空闲
 - `Offline`: 红色低频短脉冲，表示开发板在 30 秒内没有收到新的 Codex 状态推送
 

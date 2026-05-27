@@ -193,11 +193,11 @@ void app_ui_init(void)
     const lv_font_t *font_large = LV_FONT_DEFAULT;
     const lv_font_t *font_normal = LV_FONT_DEFAULT;
 
-#if LV_FONT_MONTSERRAT_18
-    font_large = &lv_font_montserrat_18;
+#if LV_FONT_MONTSERRAT_16
+    font_large = &lv_font_montserrat_16;
 #endif
-#if LV_FONT_MONTSERRAT_12
-    font_normal = &lv_font_montserrat_12;
+#if LV_FONT_MONTSERRAT_14
+    font_normal = &lv_font_montserrat_14;
 #endif
 
     lv_obj_clean(lv_scr_act());
