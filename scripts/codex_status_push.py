@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 
 ACTIVE_SECONDS = 90
+TRANSIENT_HTTP_CODES = {429, 502, 503, 504}
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,8 +34,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--codex-home",
-        default=str(Path.home() / ".codex"),
-        help="Codex home directory. Default: ~/.codex",
+        default=None,
+        help="Override the Codex data directory. By default the script auto-detects CODEX_HOME or ~/.codex.",
     )
     parser.add_argument(
         "--once",
@@ -51,6 +52,23 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=5.0,
         help="HTTP timeout in seconds. Default: 5",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Retry count for transient push failures. Default: 3",
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=1.0,
+        help="Initial retry delay in seconds. Default: 1",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print every payload and push response while running continuously.",
     )
     return parser.parse_args()
 
@@ -89,6 +107,35 @@ def mask_email(email: str) -> str:
 def read_json(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def is_codex_home(path: Path) -> bool:
+    return (path / "auth.json").is_file() and (path / "sessions").is_dir()
+
+
+def resolve_codex_home(override: Optional[str]) -> Path:
+    candidates = []
+
+    if override:
+        candidates.append(Path(os.path.expanduser(override)))
+
+    env_home = os.environ.get("CODEX_HOME")
+    if env_home:
+        candidates.append(Path(os.path.expanduser(env_home)))
+
+    candidates.append(Path.home() / ".codex")
+
+    for path in candidates:
+        expanded = path.resolve()
+        if is_codex_home(expanded):
+            return expanded
+
+    checked = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        "Could not find Codex data directory. "
+        f"Checked: {checked}. "
+        "Run Codex once on this computer, set CODEX_HOME, or pass --codex-home."
+    )
 
 
 def load_auth_profile(codex_home: Path) -> Dict[str, str]:
@@ -226,16 +273,62 @@ def post_status(board: str, payload: Dict[str, Any], timeout: float) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
+def push_status_with_retry(
+    board: str,
+    payload: Dict[str, Any],
+    timeout: float,
+    max_retries: int,
+    retry_delay: float,
+) -> str:
+    attempts = max(max_retries, 0) + 1
+    delay = max(retry_delay, 0.1)
+    last_error: Optional[BaseException] = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return post_status(board, payload, timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in TRANSIENT_HTTP_CODES or attempt >= attempts:
+                raise
+            last_error = exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt >= attempts:
+                raise
+            last_error = exc
+
+        print(
+            f"[codex-status] push retry {attempt}/{attempts - 1}: {last_error}",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+        delay = min(delay * 2, 10.0)
+
+    raise RuntimeError(f"push failed after retries: {last_error}")
+
+
 def run_once(args: argparse.Namespace) -> int:
-    codex_home = Path(os.path.expanduser(args.codex_home))
+    codex_home = resolve_codex_home(args.codex_home)
     payload = build_payload(codex_home)
-    print(json.dumps(payload, ensure_ascii=False))
+    if args.print_only or args.once or args.verbose:
+        print(json.dumps(payload, ensure_ascii=False))
 
     if args.print_only:
         return 0
 
-    response = post_status(args.board, payload, args.timeout)
-    print(response)
+    response = push_status_with_retry(
+        args.board,
+        payload,
+        args.timeout,
+        args.max_retries,
+        args.retry_delay,
+    )
+    if args.once or args.verbose:
+        print(response)
+    else:
+        print(
+            "[codex-status] pushed "
+            f"status={payload['status']} session={payload['session']} weekly={payload['weekly']}"
+        )
     return 0
 
 
@@ -251,7 +344,7 @@ def main() -> int:
         except RuntimeError as exc:
             print(f"[codex-status] {exc}", file=sys.stderr)
             result = 1
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
             print(f"[codex-status] push failed: {exc}", file=sys.stderr)
             result = 1
         except Exception as exc:  # noqa: BLE001

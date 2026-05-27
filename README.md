@@ -137,9 +137,11 @@ curl "http://板子IP/api/codex?session=28&session_reset=3h%2012m%20to%20reset"
 脚本特性：
 
 - 零第三方依赖，只使用 Python 标准库。
+- 自动发现 Codex 数据目录，优先使用 `CODEX_HOME`，否则使用当前用户的 `~/.codex`。
 - 自动读取 `~/.codex/auth.json`，提取邮箱并做脱敏显示。
 - 自动读取最新的 `~/.codex/sessions/.../rollout-*.jsonl`，提取 5 小时与 7 天用量百分比、重置时间和套餐信息。
 - 当最近 90 秒内有会话活动时显示 `Active`，否则显示 `Idle`。
+- 推送遇到 timeout、429、502、503、504 等临时失败时会自动重试并做指数退避。
 
 ## 状态灯语言
 
@@ -179,7 +181,11 @@ python scripts/codex_status_push.py --board http://板子IP --interval 10
 - `--interval`: 连续运行时的推送间隔，默认 `10`
 - `--once`: 只执行一次
 - `--print-only`: 仅打印 payload，不发送 HTTP 请求
-- `--codex-home`: 自定义 Codex 数据目录，默认是 `~/.codex`
+- `--codex-home`: 当自动发现失败时，手动指定 Codex 数据目录
+- `--timeout`: 单次 HTTP 请求超时时间，默认 `5`
+- `--max-retries`: 临时推送失败的重试次数，默认 `3`
+- `--retry-delay`: 初始重试等待秒数，默认 `1`
+- `--verbose`: 连续运行时打印完整 payload 和板子响应
 
 返回的 payload 形如：
 
