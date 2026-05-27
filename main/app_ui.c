@@ -87,18 +87,53 @@ static lv_obj_t *make_bar(lv_obj_t *parent, int x, int y, int width)
     return bar;
 }
 
-static lv_obj_t *make_icon_circle(lv_obj_t *parent, int x, int y, int size, lv_color_t color)
+static void draw_codex_bitmap(lv_obj_t *parent)
 {
-    lv_obj_t *circle = lv_obj_create(parent);
-    lv_obj_set_size(circle, size, size);
-    lv_obj_align(circle, LV_ALIGN_TOP_LEFT, x, y);
-    lv_obj_set_style_radius(circle, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_opa(circle, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(circle, color, 0);
-    lv_obj_set_style_border_width(circle, 0, 0);
-    lv_obj_set_style_pad_all(circle, 0, 0);
-    lv_obj_clear_flag(circle, LV_OBJ_FLAG_SCROLLABLE);
-    return circle;
+    static lv_color_t icon_buf[30 * 30];
+    static const char *icon_rows[30] = {
+        "..........#######.............",
+        ".........#########............",
+        "........###....########.......",
+        ".......###......#########.....",
+        "......###......#####.#####....",
+        ".....###.....####.......###...",
+        "...#####...#####.........###..",
+        "..######..####....###.....##..",
+        ".###..##..##.....#####....##..",
+        ".##...##..##...###..####..##..",
+        "###...##..##.####....#######..",
+        "##....##..#########....#####..",
+        "##....##..###....###.....###..",
+        "##....##..##......####....###.",
+        "###...##..##......######...##.",
+        ".##...######......##..##...###",
+        ".###....####......##..##....##",
+        "..###.....###....###..##....##",
+        "..#####....#########..##....##",
+        "..#######....####.##..##...###",
+        "..##..####..###...##..##...##.",
+        "..##....#####.....##..##..###.",
+        "..##.....###....####..######..",
+        "..###.........#####...#####...",
+        "...###.......####.....###.....",
+        "....#####.#####......###......",
+        ".....#########......###.......",
+        ".......########...####........",
+        "............#########.........",
+        ".............#######..........",
+    };
+
+    lv_obj_t *canvas = lv_canvas_create(parent);
+    lv_canvas_set_buffer(canvas, icon_buf, 30, 30, LV_IMG_CF_TRUE_COLOR);
+    lv_obj_align(canvas, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_clear_flag(canvas, LV_OBJ_FLAG_SCROLLABLE);
+
+    for (int y = 0; y < 30; y++) {
+        for (int x = 0; x < 30; x++) {
+            lv_color_t color = icon_rows[y][x] == '#' ? lv_color_black() : lv_color_white();
+            lv_canvas_set_px_color(canvas, x, y, color);
+        }
+    }
 }
 
 static void pull_ip_from_line(const char *line)
@@ -192,28 +227,7 @@ void app_ui_init(void)
     lv_obj_set_style_pad_all(avatar, 0, 0);
     lv_obj_clear_flag(avatar, LV_OBJ_FLAG_SCROLLABLE);
 
-    make_icon_circle(avatar, 4, 6, 18, lv_color_hex(0x5f8dff));
-    make_icon_circle(avatar, 9, 2, 18, lv_color_hex(0x9b8cff));
-    make_icon_circle(avatar, 13, 6, 17, lv_color_hex(0x6577ff));
-    make_icon_circle(avatar, 7, 10, 19, lv_color_hex(0x3446f5));
-    make_icon_circle(avatar, 2, 11, 16, lv_color_hex(0x4c72ff));
-
-    lv_obj_t *codex_mark = lv_label_create(avatar);
-    lv_label_set_text(codex_mark, ">");
-    lv_obj_set_style_text_color(codex_mark, lv_color_white(), 0);
-    lv_obj_set_style_text_font(codex_mark, font_large, 0);
-    lv_obj_set_style_text_align(codex_mark, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(codex_mark, LV_ALIGN_TOP_LEFT, 7, 7);
-
-    lv_obj_t *codex_dash = lv_obj_create(avatar);
-    lv_obj_set_size(codex_dash, 10, 4);
-    lv_obj_align(codex_dash, LV_ALIGN_TOP_LEFT, 17, 18);
-    lv_obj_set_style_radius(codex_dash, 2, 0);
-    lv_obj_set_style_bg_color(codex_dash, lv_color_white(), 0);
-    lv_obj_set_style_bg_opa(codex_dash, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(codex_dash, 0, 0);
-    lv_obj_set_style_pad_all(codex_dash, 0, 0);
-    lv_obj_clear_flag(codex_dash, LV_OBJ_FLAG_SCROLLABLE);
+    draw_codex_bitmap(avatar);
 
     account_label = make_label(panel, font_large, lv_color_white(), 120);
     lv_obj_align(account_label, LV_ALIGN_TOP_LEFT, 46, 11);

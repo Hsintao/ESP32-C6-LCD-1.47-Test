@@ -11,7 +11,7 @@
 - RGB 灯状态保存到 NVS，重启后自动恢复。
 - LCD 使用 320 x 172 横屏显示 Codex 状态仪表盘。
 - PC 可通过 `/api/codex` 推送 Codex 账户、工作状态和限额进度。
-- Codex 状态屏左上角使用蓝紫色 Codex 图标，并关闭 LVGL 右下角帧率/CPU 性能监视显示。
+- Codex 状态屏左上角使用黑白 Codex 图标，并关闭 LVGL 右下角帧率/CPU 性能监视显示。
 
 ## 配网
 
@@ -79,7 +79,7 @@ LCD 会以横屏仪表盘方式显示 Codex 账户、工作状态、套餐、IP�
 
 界面细节：
 
-- 左上角显示蓝紫色 Codex 图标。
+- 左上角显示黑白 Codex 图标。
 - 顶部显示脱敏账户、工作状态、套餐和当前 IP。
 - 中部显示 Session 与 Weekly 两条限额进度条。
 - 底部显示 Extra usage 状态。
