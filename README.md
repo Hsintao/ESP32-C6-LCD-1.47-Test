@@ -14,6 +14,7 @@
 - 仓库提供 `scripts/codex_status_push.py`，可在 PC 端自动读取本机 Codex 状态并实时推送到板子。
 - `/api/codex` 同时兼容 JSON 数字和字符串形式的 `session` / `weekly` 百分比。
 - Codex 状态屏左上角使用黑白 Codex 图标，并关闭 LVGL 右下角帧率/CPU 性能监视显示。
+- 板载 RGB 可跟随 Codex 状态显示安静风格的状态灯效。
 
 ## 配网
 
@@ -139,6 +140,20 @@ curl "http://板子IP/api/codex?session=28&session_reset=3h%2012m%20to%20reset"
 - 自动读取 `~/.codex/auth.json`，提取邮箱并做脱敏显示。
 - 自动读取最新的 `~/.codex/sessions/.../rollout-*.jsonl`，提取 5 小时与 7 天用量百分比、重置时间和套餐信息。
 - 当最近 90 秒内有会话活动时显示 `Active`，否则显示 `Idle`。
+
+## 状态灯语言
+
+当前默认启用安静风格的状态灯语言：
+
+- `Active`: 青蓝色慢呼吸，表示 Codex 正在活跃工作
+- `Idle`: 低亮度蓝灰色慢呼吸，表示 Codex 在线但空闲
+- `Offline`: 红色低频短脉冲，表示开发板在 30 秒内没有收到新的 Codex 状态推送
+
+说明：
+
+- `Offline` 由开发板本地判定，不需要 PC 端显式发送
+- 访问 `/api/codex` 并收到新的状态后，灯效会回到 `Active` 或 `Idle`
+- 如果手动调用 `/api/light` 或 `/api/rgb`，会切回手动灯光；下次收到新的 Codex 状态推送后，又会回到状态灯模式
 
 先打印一次当前 payload，确认读取结果：
 

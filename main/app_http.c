@@ -299,6 +299,7 @@ static void codex_status_apply(void)
 {
     codex_status_refresh_ip();
     app_ui_update_codex_status(&codex_status);
+    app_led_state_apply_codex_status(codex_status.work_status);
 }
 
 static esp_err_t send_codex_json(httpd_req_t *req)

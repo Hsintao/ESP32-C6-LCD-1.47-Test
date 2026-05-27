@@ -6,10 +6,23 @@
 static led_strip_handle_t led_strip;
 static TaskHandle_t breathing_task_handle = NULL;
 
+typedef enum {
+    RGB_EFFECT_BREATHING,
+    RGB_EFFECT_PULSE,
+} rgb_effect_t;
+
 typedef struct {
+    rgb_effect_t effect;
     uint8_t r;
     uint8_t g;
     uint8_t b;
+    uint8_t min_brightness;
+    uint8_t max_brightness;
+    uint8_t step;
+    uint8_t peak_brightness;
+    uint16_t delay_ms;
+    uint16_t on_ms;
+    uint16_t off_ms;
 } rgb_color_t;
 
 void RGB_Init(void)
@@ -34,34 +47,81 @@ void Set_RGB(uint8_t red_val, uint8_t green_val, uint8_t blue_val)
 
 static void breathing_task(void *arg)
 {
-    rgb_color_t *color = (rgb_color_t *)arg;
-    int brightness = 0;
-    int step = 2;
+    rgb_color_t color = *(rgb_color_t *)arg;
+    free(arg);
+
+    int brightness = color.min_brightness;
+    int step = color.step ? color.step : 1;
+
     while (1) {
-        brightness += step;
-        if (brightness >= 255) {
-            brightness = 255;
-            step = -2;
-        } else if (brightness <= 0) {
-            brightness = 0;
-            step = 2;
+        if (color.effect == RGB_EFFECT_PULSE) {
+            uint8_t r = (uint8_t)((color.r * color.peak_brightness) / 255);
+            uint8_t g = (uint8_t)((color.g * color.peak_brightness) / 255);
+            uint8_t b = (uint8_t)((color.b * color.peak_brightness) / 255);
+            Set_RGB(r, g, b);
+            vTaskDelay(pdMS_TO_TICKS(color.on_ms));
+            Set_RGB(0, 0, 0);
+            vTaskDelay(pdMS_TO_TICKS(color.off_ms));
+            continue;
         }
-        uint8_t r = (uint8_t)((color->r * brightness) / 255);
-        uint8_t g = (uint8_t)((color->g * brightness) / 255);
-        uint8_t b = (uint8_t)((color->b * brightness) / 255);
+
+        brightness += step;
+        if (brightness >= color.max_brightness) {
+            brightness = color.max_brightness;
+            step = -step;
+        } else if (brightness <= color.min_brightness) {
+            brightness = color.min_brightness;
+            step = -step;
+        }
+
+        uint8_t r = (uint8_t)((color.r * brightness) / 255);
+        uint8_t g = (uint8_t)((color.g * brightness) / 255);
+        uint8_t b = (uint8_t)((color.b * brightness) / 255);
         Set_RGB(r, g, b);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(color.delay_ms));
     }
 }
 
 void RGB_StartBreathing(uint8_t r, uint8_t g, uint8_t b)
 {
+    RGB_StartBreathingEx(r, g, b, 0, 255, 2, 10);
+}
+
+void RGB_StartBreathingEx(uint8_t r, uint8_t g, uint8_t b, uint8_t min_brightness, uint8_t max_brightness, uint8_t step, uint16_t delay_ms)
+{
     RGB_StopBreathing();
     rgb_color_t *color = malloc(sizeof(rgb_color_t));
     if (color == NULL) return;
+    color->effect = RGB_EFFECT_BREATHING;
     color->r = r;
     color->g = g;
     color->b = b;
+    color->min_brightness = min_brightness;
+    color->max_brightness = max_brightness < min_brightness ? min_brightness : max_brightness;
+    color->step = step ? step : 1;
+    color->delay_ms = delay_ms ? delay_ms : 10;
+    color->peak_brightness = 255;
+    color->on_ms = 0;
+    color->off_ms = 0;
+    xTaskCreatePinnedToCore(breathing_task, "RGB Breathing", 4096, color, 4, &breathing_task_handle, 0);
+}
+
+void RGB_StartPulse(uint8_t r, uint8_t g, uint8_t b, uint8_t peak_brightness, uint16_t on_ms, uint16_t off_ms)
+{
+    RGB_StopBreathing();
+    rgb_color_t *color = malloc(sizeof(rgb_color_t));
+    if (color == NULL) return;
+    color->effect = RGB_EFFECT_PULSE;
+    color->r = r;
+    color->g = g;
+    color->b = b;
+    color->min_brightness = 0;
+    color->max_brightness = 0;
+    color->step = 0;
+    color->delay_ms = 0;
+    color->peak_brightness = peak_brightness;
+    color->on_ms = on_ms ? on_ms : 120;
+    color->off_ms = off_ms ? off_ms : 1880;
     xTaskCreatePinnedToCore(breathing_task, "RGB Breathing", 4096, color, 4, &breathing_task_handle, 0);
 }
 
