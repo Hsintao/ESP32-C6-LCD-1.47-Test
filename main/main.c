@@ -5,22 +5,29 @@
  */
 
 #include "ST7789.h"
-#include "SD_SPI.h"
 #include "RGB.h"
-#include "Wireless.h"
-#include "LVGL_Example.h"
+#include "esp_err.h"
+#include "LVGL_Driver.h"
+#include "app_http.h"
+#include "app_led_state.h"
+#include "app_storage.h"
+#include "app_ui.h"
+#include "app_wifi.h"
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK(app_storage_init());
+
     RGB_Init();
-    RGB_StartBreathing(0, 0, 255);
-    BLE_Peripheral_Init();
-    SD_Init();
+    app_led_state_init();
+
     LCD_Init();
     BK_Light(50);
     LVGL_Init();
+    app_ui_init();
 
-    Lvgl_Example1();
+    ESP_ERROR_CHECK(app_wifi_start());
+    ESP_ERROR_CHECK(app_http_start());
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(10));
