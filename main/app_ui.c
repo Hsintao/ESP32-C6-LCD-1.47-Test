@@ -28,7 +28,6 @@ static lv_obj_t *session_reset_label;
 static lv_obj_t *session_percent_label;
 static lv_obj_t *weekly_reset_label;
 static lv_obj_t *weekly_percent_label;
-static lv_obj_t *extra_usage_label;
 static lv_obj_t *session_bar;
 static lv_obj_t *weekly_bar;
 
@@ -165,8 +164,6 @@ static void update_screen_locked(void)
 
     label_set(session_reset_label, pending.session_reset);
     label_set(weekly_reset_label, pending.weekly_reset);
-    label_set(extra_usage_label, pending.extra_usage);
-
     int session = clamp_percent(pending.session_percent);
     int weekly = clamp_percent(pending.weekly_percent);
     lv_bar_set_value(session_bar, session, LV_ANIM_OFF);
@@ -207,7 +204,7 @@ void app_ui_init(void)
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x021633), 0);
 
     lv_obj_t *panel = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(panel, 316, 168);
+    lv_obj_set_size(panel, 316, 146);
     lv_obj_align(panel, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_radius(panel, 8, 0);
     lv_obj_set_style_border_width(panel, 1, 0);
@@ -266,18 +263,6 @@ void app_ui_init(void)
     weekly_percent_label = make_label(panel, font_normal, lv_color_hex(0x40ffd5), 44);
     lv_obj_set_style_text_align(weekly_percent_label, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align(weekly_percent_label, LV_ALIGN_TOP_RIGHT, -10, 123);
-
-    lv_obj_t *extra_label = make_label(panel, font_normal, lv_color_white(), 120);
-    lv_label_set_text(extra_label, "Extra usage");
-    lv_obj_align(extra_label, LV_ALIGN_BOTTOM_LEFT, 28, -2);
-
-    lv_obj_t *refresh_label = make_label(panel, font_large, lv_color_white(), 20);
-    lv_label_set_text(refresh_label, "*");
-    lv_obj_align(refresh_label, LV_ALIGN_BOTTOM_LEFT, 10, -2);
-
-    extra_usage_label = make_label(panel, font_normal, lv_color_hex(0xbde7ff), 48);
-    lv_obj_set_style_text_align(extra_usage_label, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(extra_usage_label, LV_ALIGN_BOTTOM_RIGHT, -10, -4);
 
     lv_timer_create(ui_timer_cb, 100, NULL);
     update_screen_locked();

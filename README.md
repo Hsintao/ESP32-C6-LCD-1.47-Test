@@ -11,6 +11,7 @@
 - RGB 灯状态保存到 NVS，重启后自动恢复。
 - LCD 使用 320 x 172 横屏显示 Codex 状态仪表盘。
 - PC 可通过 `/api/codex` 推送 Codex 账户、工作状态和限额进度。
+- 仓库提供 `scripts/codex_status_push.py`，可在 PC 端自动读取本机 Codex 状态并实时推送到板子。
 - Codex 状态屏左上角使用黑白 Codex 图标，并关闭 LVGL 右下角帧率/CPU 性能监视显示。
 
 ## 配网
@@ -82,7 +83,6 @@ LCD 会以横屏仪表盘方式显示 Codex 账户、工作状态、套餐、IP�
 - 左上角显示黑白 Codex 图标。
 - 顶部显示脱敏账户、工作状态、套餐和当前 IP。
 - 中部显示 Session 与 Weekly 两条限额进度条。
-- 底部显示 Extra usage 状态。
 - 已关闭 LVGL 内置性能监视，因此右下角不会显示帧率和 CPU 占用率。
 
 显示字段：
@@ -94,18 +94,17 @@ LCD 会以横屏仪表盘方式显示 Codex 账户、工作状态、套餐、IP�
 - `session_reset`: 5 小时限额重置时间文案。
 - `weekly`: 一周限额进度，范围 `0` 到 `100`。
 - `weekly_reset`: 一周限额重置时间文案。
-- `extra`: Extra usage 状态，例如 `Off`。
 
 推送示例：
 
 ```bash
-curl -X POST "http://板子IP/api/codex" -H "Content-Type: application/json" -d "{\"account\":\"2nw*@*.com\",\"status\":\"Active\",\"plan\":\"Plus\",\"session\":16,\"session_reset\":\"4h 19m to reset\",\"weekly\":3,\"weekly_reset\":\"Wed 21:17 reset\",\"extra\":\"Off\"}"
+curl -X POST "http://板子IP/api/codex" -H "Content-Type: application/json" -d "{\"account\":\"2nw*@*.com\",\"status\":\"Active\",\"plan\":\"Plus\",\"session\":16,\"session_reset\":\"4h 19m to reset\",\"weekly\":3,\"weekly_reset\":\"Wed 21:17 reset\"}"
 ```
 
 也可以用 URL 参数快速更新：
 
 ```bash
-curl "http://板子IP/api/codex?account=2nw*@*.com&status=Active&plan=Plus&session=16&session_reset=4h%2019m%20to%20reset&weekly=3&weekly_reset=Wed%2021:17%20reset&extra=Off"
+curl "http://板子IP/api/codex?account=2nw*@*.com&status=Active&plan=Plus&session=16&session_reset=4h%2019m%20to%20reset&weekly=3&weekly_reset=Wed%2021:17%20reset"
 ```
 
 查询当前显示状态：
@@ -121,6 +120,55 @@ curl "http://板子IP/api/codex?session=28&session_reset=3h%2012m%20to%20reset"
 ```
 
 注意：`session_reset`、`weekly_reset` 里有空格时，URL 参数需要做 URL 编码；使用 POST JSON 时不需要手动编码。
+
+## PC 端自动推送 Codex 状态
+
+仓库自带 `scripts/codex_status_push.py`，用于在 Windows / macOS / Linux 上读取本机 Codex Desktop 的登录信息与最新会话限额状态，并自动推送到板子的 `/api/codex`。
+
+脚本特性：
+
+- 零第三方依赖，只使用 Python 标准库。
+- 自动读取 `~/.codex/auth.json`，提取邮箱并做脱敏显示。
+- 自动读取最新的 `~/.codex/sessions/.../rollout-*.jsonl`，提取 5 小时与 7 天用量百分比、重置时间和套餐信息。
+- 当最近 90 秒内有会话活动时显示 `Active`，否则显示 `Idle`。
+
+先打印一次当前 payload，确认读取结果：
+
+```bash
+python scripts/codex_status_push.py --board http://板子IP --once --print-only
+```
+
+推送一次到板子：
+
+```bash
+python scripts/codex_status_push.py --board http://板子IP --once
+```
+
+持续实时推送，每 10 秒刷新一次：
+
+```bash
+python scripts/codex_status_push.py --board http://板子IP --interval 10
+```
+
+常用参数：
+
+- `--board`: 板子的基础地址，例如 `http://192.168.1.88`
+- `--interval`: 连续运行时的推送间隔，默认 `10`
+- `--once`: 只执行一次
+- `--print-only`: 仅打印 payload，不发送 HTTP 请求
+- `--codex-home`: 自定义 Codex 数据目录，默认是 `~/.codex`
+
+返回的 payload 形如：
+
+```json
+{"account":"2nw*@p*.com","status":"Active","plan":"Plus","session":21,"session_reset":"4h 12m to reset","weekly":40,"weekly_reset":"Sun 13:53 reset"}
+```
+
+如果你想在 Windows 开机后自动常驻运行，可以把下面命令放进计划任务或启动脚本：
+
+```powershell
+python C:\path\to\scripts\codex_status_push.py --board http://板子IP --interval 10
+```
 
 ## 构建与烧录
 
@@ -140,6 +188,7 @@ idf.py -p COM3 flash monitor
 - `main/app_led_state.c`: RGB 状态应用与持久化封装。
 - `main/app_storage.c`: NVS 读写 WiFi 凭据和 RGB 状态。
 - `main/app_ui.c`: LCD 横屏 Codex 状态仪表盘。
+- `scripts/codex_status_push.py`: PC 端读取本机 Codex 状态并推送到板子的脚本。
 - `main/LVGL_Driver/LVGL_Driver.c`: LVGL 横屏分辨率、ST7789 硬件横屏和 flush 偏移。
 - `main/LCD_Driver/ST7789.c`: LCD SPI bus 初始化和 ST7789 面板初始化。
 
