@@ -227,7 +227,7 @@ void app_ui_init(void)
     draw_codex_bitmap(avatar);
 
     account_label = make_label(panel, font_large, lv_color_white(), 120);
-    lv_obj_align(account_label, LV_ALIGN_TOP_LEFT, 46, 11);
+    lv_obj_align(account_label, LV_ALIGN_TOP_LEFT, 46, 7);
 
     status_label = make_pill(panel, font_normal, lv_color_hex(0x00d47e), 64);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 170, 10);
@@ -236,7 +236,7 @@ void app_ui_init(void)
     lv_obj_align(plan_label, LV_ALIGN_TOP_RIGHT, -9, 10);
 
     ip_label = make_label(panel, font_normal, lv_color_hex(0xbde7ff), 170);
-    lv_obj_align(ip_label, LV_ALIGN_TOP_LEFT, 46, 35);
+    lv_obj_align(ip_label, LV_ALIGN_TOP_LEFT, 46, 28);
 
     lv_obj_t *session_label = make_label(panel, font_large, lv_color_white(), 100);
     lv_label_set_text(session_label, "Session");
