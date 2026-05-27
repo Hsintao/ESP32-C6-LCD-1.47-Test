@@ -6,12 +6,24 @@
 #include <string.h>
 #include "app_led_state.h"
 #include "app_storage.h"
+#include "app_ui.h"
 #include "app_wifi.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 
 static const char *TAG = "app_http";
 static httpd_handle_t server;
+static app_ui_codex_status_t codex_status = {
+    .account = "2nw*@*.com",
+    .work_status = "Active",
+    .plan = "Plus",
+    .ip = "0.0.0.0",
+    .session_reset = "5h reset",
+    .weekly_reset = "Weekly reset",
+    .extra_usage = "Off",
+    .session_percent = 0,
+    .weekly_percent = 0,
+};
 
 static esp_err_t read_body(httpd_req_t *req, char *buf, size_t buf_len)
 {
@@ -103,6 +115,39 @@ static bool parse_uint8_text(const char *text, uint8_t *value)
     return true;
 }
 
+static bool parse_percent_text(const char *text, int *value)
+{
+    if (!text || text[0] == '\0') {
+        return false;
+    }
+
+    char *end = NULL;
+    long parsed = strtol(text, &end, 10);
+    if (end == text) {
+        return false;
+    }
+    if (parsed < 0) {
+        parsed = 0;
+    } else if (parsed > 100) {
+        parsed = 100;
+    }
+
+    *value = (int)parsed;
+    return true;
+}
+
+static bool query_value(httpd_req_t *req, const char *key, char *out, size_t out_len)
+{
+    char query[320];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        return false;
+    }
+    if (httpd_query_key_value(query, key, out, out_len) != ESP_OK) {
+        return false;
+    }
+    return true;
+}
+
 static bool query_rgb(httpd_req_t *req, uint8_t *r, uint8_t *g, uint8_t *b)
 {
     char query[96];
@@ -142,6 +187,50 @@ static bool json_rgb_value(const char *body, const char *key, uint8_t *value)
     return parse_uint8_text(p, value);
 }
 
+static bool json_string_value(const char *body, const char *key, char *out, size_t out_len)
+{
+    char needle[24];
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    const char *p = strstr(body, needle);
+    if (!p) {
+        return false;
+    }
+    p = strchr(p, ':');
+    if (!p) {
+        return false;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p != '"') {
+        return false;
+    }
+    p++;
+
+    size_t out_i = 0;
+    while (*p && *p != '"' && out_i + 1 < out_len) {
+        if (*p == '\\' && p[1]) {
+            p++;
+        }
+        out[out_i++] = *p++;
+    }
+    out[out_i] = '\0';
+    return out_i > 0;
+}
+
+static bool body_string_value(const char *body, const char *key, char *out, size_t out_len)
+{
+    return form_value(body, key, out, out_len) || json_string_value(body, key, out, out_len);
+}
+
+static bool body_percent_value(const char *body, const char *key, int *value)
+{
+    char text[8];
+    return (form_value(body, key, text, sizeof(text)) || json_string_value(body, key, text, sizeof(text))) &&
+           parse_percent_text(text, value);
+}
+
 static bool body_rgb(const char *body, uint8_t *r, uint8_t *g, uint8_t *b)
 {
     char value[8];
@@ -169,6 +258,120 @@ static esp_err_t send_rgb_json(httpd_req_t *req)
              app_led_state_get(), r, g, b);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
+}
+
+static void codex_status_refresh_ip(void)
+{
+    strlcpy(codex_status.ip, app_wifi_get_ip(), sizeof(codex_status.ip));
+}
+
+static void codex_status_apply(void)
+{
+    codex_status_refresh_ip();
+    app_ui_update_codex_status(&codex_status);
+}
+
+static esp_err_t send_codex_json(httpd_req_t *req)
+{
+    codex_status_refresh_ip();
+
+    char json[360];
+    snprintf(json, sizeof(json),
+             "{\"account\":\"%s\",\"status\":\"%s\",\"plan\":\"%s\",\"ip\":\"%s\","
+             "\"session\":%d,\"session_reset\":\"%s\",\"weekly\":%d,"
+             "\"weekly_reset\":\"%s\",\"extra\":\"%s\"}",
+             codex_status.account,
+             codex_status.work_status,
+             codex_status.plan,
+             codex_status.ip,
+             codex_status.session_percent,
+             codex_status.session_reset,
+             codex_status.weekly_percent,
+             codex_status.weekly_reset,
+             codex_status.extra_usage);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+static bool update_codex_from_query(httpd_req_t *req)
+{
+    char value[64];
+    bool changed = false;
+
+    if (query_value(req, "account", value, sizeof(value))) {
+        strlcpy(codex_status.account, value, sizeof(codex_status.account));
+        changed = true;
+    }
+    if (query_value(req, "status", value, sizeof(value))) {
+        strlcpy(codex_status.work_status, value, sizeof(codex_status.work_status));
+        changed = true;
+    }
+    if (query_value(req, "plan", value, sizeof(value))) {
+        strlcpy(codex_status.plan, value, sizeof(codex_status.plan));
+        changed = true;
+    }
+    if (query_value(req, "session", value, sizeof(value)) && parse_percent_text(value, &codex_status.session_percent)) {
+        changed = true;
+    }
+    if (query_value(req, "session_reset", value, sizeof(value))) {
+        strlcpy(codex_status.session_reset, value, sizeof(codex_status.session_reset));
+        changed = true;
+    }
+    if (query_value(req, "weekly", value, sizeof(value)) && parse_percent_text(value, &codex_status.weekly_percent)) {
+        changed = true;
+    }
+    if (query_value(req, "weekly_reset", value, sizeof(value))) {
+        strlcpy(codex_status.weekly_reset, value, sizeof(codex_status.weekly_reset));
+        changed = true;
+    }
+    if (query_value(req, "extra", value, sizeof(value))) {
+        strlcpy(codex_status.extra_usage, value, sizeof(codex_status.extra_usage));
+        changed = true;
+    }
+
+    return changed;
+}
+
+static bool update_codex_from_body(const char *body)
+{
+    bool changed = false;
+    int percent;
+    char value[64];
+
+    if (body_string_value(body, "account", value, sizeof(value))) {
+        strlcpy(codex_status.account, value, sizeof(codex_status.account));
+        changed = true;
+    }
+    if (body_string_value(body, "status", value, sizeof(value))) {
+        strlcpy(codex_status.work_status, value, sizeof(codex_status.work_status));
+        changed = true;
+    }
+    if (body_string_value(body, "plan", value, sizeof(value))) {
+        strlcpy(codex_status.plan, value, sizeof(codex_status.plan));
+        changed = true;
+    }
+    if (body_percent_value(body, "session", &percent)) {
+        codex_status.session_percent = percent;
+        changed = true;
+    }
+    if (body_string_value(body, "session_reset", value, sizeof(value))) {
+        strlcpy(codex_status.session_reset, value, sizeof(codex_status.session_reset));
+        changed = true;
+    }
+    if (body_percent_value(body, "weekly", &percent)) {
+        codex_status.weekly_percent = percent;
+        changed = true;
+    }
+    if (body_string_value(body, "weekly_reset", value, sizeof(value))) {
+        strlcpy(codex_status.weekly_reset, value, sizeof(codex_status.weekly_reset));
+        changed = true;
+    }
+    if (body_string_value(body, "extra", value, sizeof(value))) {
+        strlcpy(codex_status.extra_usage, value, sizeof(codex_status.extra_usage));
+        changed = true;
+    }
+
+    return changed;
 }
 
 static const char *config_page =
@@ -306,6 +509,26 @@ static esp_err_t rgb_post_handler(httpd_req_t *req)
     return send_rgb_json(req);
 }
 
+static esp_err_t codex_get_handler(httpd_req_t *req)
+{
+    if (update_codex_from_query(req)) {
+        codex_status_apply();
+    }
+    return send_codex_json(req);
+}
+
+static esp_err_t codex_post_handler(httpd_req_t *req)
+{
+    char body[512];
+    if (read_body(req, body, sizeof(body)) != ESP_OK || !update_codex_from_body(body)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "invalid codex status");
+        return ESP_FAIL;
+    }
+
+    codex_status_apply();
+    return send_codex_json(req);
+}
+
 esp_err_t app_http_start(void)
 {
     if (server) {
@@ -327,6 +550,8 @@ esp_err_t app_http_start(void)
     httpd_uri_t light_post = {.uri = "/api/light", .method = HTTP_POST, .handler = light_post_handler};
     httpd_uri_t rgb_get = {.uri = "/api/rgb", .method = HTTP_GET, .handler = rgb_get_handler};
     httpd_uri_t rgb_post = {.uri = "/api/rgb", .method = HTTP_POST, .handler = rgb_post_handler};
+    httpd_uri_t codex_get = {.uri = "/api/codex", .method = HTTP_GET, .handler = codex_get_handler};
+    httpd_uri_t codex_post = {.uri = "/api/codex", .method = HTTP_POST, .handler = codex_post_handler};
 
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &root));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &configure));
@@ -334,6 +559,8 @@ esp_err_t app_http_start(void)
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &light_post));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &rgb_get));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &rgb_post));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &codex_get));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &codex_post));
     ESP_LOGI(TAG, "http server started");
     return ESP_OK;
 }
