@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 
 ACTIVE_SECONDS = 90
 TRANSIENT_HTTP_CODES = {429, 502, 503, 504}
+PUSH_COMPARE_FIELDS = ("account", "status", "plan", "session", "weekly")
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,6 +108,24 @@ def mask_email(email: str) -> str:
 def read_json(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def read_cached_payload(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.is_file():
+        return None
+
+    try:
+        data = read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    return data if isinstance(data, dict) else None
+
+
+def write_cached_payload(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
 
 def is_codex_home(path: Path) -> bool:
@@ -259,6 +278,16 @@ def build_payload(codex_home: Path) -> Dict[str, Any]:
     }
 
 
+def cache_file_path() -> Path:
+    return Path(__file__).resolve().parent / "codex-status-push-cache.json"
+
+
+def comparable_payload(payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if payload is None:
+        return None
+    return {field: payload.get(field) for field in PUSH_COMPARE_FIELDS}
+
+
 def post_status(board: str, payload: Dict[str, Any], timeout: float) -> str:
     url = board.rstrip("/") + "/api/codex"
     body = json.dumps(payload).encode("utf-8")
@@ -309,10 +338,16 @@ def push_status_with_retry(
 def run_once(args: argparse.Namespace) -> int:
     codex_home = resolve_codex_home(args.codex_home)
     payload = build_payload(codex_home)
+    last_payload = read_cached_payload(cache_file_path())
     if args.print_only or args.once or args.verbose:
         print(json.dumps(payload, ensure_ascii=False))
 
     if args.print_only:
+        return 0
+
+    if comparable_payload(last_payload) == comparable_payload(payload):
+        if args.once or args.verbose:
+            print("[codex-status] key fields unchanged, skip push")
         return 0
 
     response = push_status_with_retry(
@@ -322,6 +357,7 @@ def run_once(args: argparse.Namespace) -> int:
         args.max_retries,
         args.retry_delay,
     )
+    write_cached_payload(cache_file_path(), payload)
     if args.once or args.verbose:
         print(response)
     else:
